@@ -1,10 +1,11 @@
-// Matter = require('matter-js')
+Matter = require('matter-js')
 
 const WALL_THICKENESS = 5
 
 const Engine = Matter.Engine,
         Render = Matter.Render,
         Runner = Matter.Runner,
+        Body = Matter.Body,
         Bodies = Matter.Bodies,
         World = Matter.World,
         Composites = Matter.Composites
@@ -99,8 +100,25 @@ const bottomWindTunnel = createRectViaTopLeftPoint(
 )
 World.add(engine.world, bottomWindTunnel)
 
-balls.bodies.forEach((ball) => {
+Matter.Events.on(engine, 'collisionActive', (e) => {
+    for(const pair of e.pairs) {
+        const {bodyA, bodyB} = pair
+        const windTunnel =
+            bodyA == bottomWindTunnel ? bodyA
+                : bodyB == bottomWindTunnel ? bodyB : null
+        const otherObj = windTunnel == bodyA ? bodyB : bodyA
 
+        if(!windTunnel) return
+
+        console.log('here')
+
+        Body.applyForce(otherObj, {
+            x: otherObj.position.x,
+            y: otherObj.position.y
+        }, {
+            x: 5, y: 0
+        })
+    }
 })
 
 engine.gravity.scale = 0.0005
