@@ -1,6 +1,8 @@
-Matter = require('matter-js')
+// Matter = require('matter-js')
 
 const WALL_THICKENESS = 5
+
+const OBJS_IN_BOTTOM_WIND_TUNNEL = []
 
 const Engine = Matter.Engine,
         Render = Matter.Render,
@@ -100,7 +102,7 @@ const bottomWindTunnel = createRectViaTopLeftPoint(
 )
 World.add(engine.world, bottomWindTunnel)
 
-Matter.Events.on(engine, 'collisionActive', (e) => {
+function handleCollisionChange(e, isStart) {
     for(const pair of e.pairs) {
         const {bodyA, bodyB} = pair
         const windTunnel =
@@ -110,13 +112,26 @@ Matter.Events.on(engine, 'collisionActive', (e) => {
 
         if(!windTunnel) return
 
-        console.log('here')
+        if(isStart) OBJS_IN_BOTTOM_WIND_TUNNEL.push(otherObj)
+        else OBJS_IN_BOTTOM_WIND_TUNNEL.splice(OBJS_IN_BOTTOM_WIND_TUNNEL.indexOf(otherObj), 1)
+    }
+}
 
-        Body.applyForce(otherObj, {
-            x: otherObj.position.x,
-            y: otherObj.position.y
+Matter.Events.on(engine, 'collisionStart', (e) => {
+    handleCollisionChange(e, true)
+})
+
+Matter.Events.on(engine, 'collisionEnd', (e) => {
+    handleCollisionChange(e, false)
+})
+
+Matter.Events.on(engine, 'beforeUpdate', (e) => {
+    for(const objInBottomWindTunnel of OBJS_IN_BOTTOM_WIND_TUNNEL) {
+        Body.applyForce(objInBottomWindTunnel, {
+            x: objInBottomWindTunnel.position.x,
+            y: objInBottomWindTunnel.position.y
         }, {
-            x: 5, y: 0
+            x: 0.0001, y: 0
         })
     }
 })
