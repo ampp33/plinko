@@ -2,8 +2,6 @@
 
 const WALL_THICKENESS = 5
 
-const OBJS_IN_BOTTOM_WIND_TUNNEL = []
-
 const Engine = Matter.Engine,
         Render = Matter.Render,
         Runner = Matter.Runner,
@@ -80,59 +78,88 @@ const balls = Composites.stack(30, 30, 20, 1, 18, 18, (x,y) => {
     return Bodies.circle(x, y, 5, { frictionAir: 0.02, restitution: 1 })
 })
 const biggerBalls = Composites.stack(30, 50, 20, 1, 18, 18, (x,y) => {
-    return Bodies.circle(x, y, 8, { frictionAir: 0.02, restitution: 1 })
+    return Bodies.circle(x, y, 5, { frictionAir: 0.02, restitution: 1 })
 })
 
 World.add(engine.world, [balls, biggerBalls])
 
 // add wind tunnels!
-const bottomWindTunnel = createRectViaTopLeftPoint(
-    WALL_THICKENESS,
-    render.canvas.height - (20 + WALL_THICKENESS),
-    render.canvas.width - WALL_THICKENESS * 2,
-    20,
-    {
-        isStatic: true,
-        isSensor: true,
-        render: {
-            fillStyle: 'purple',
-            opacity: .25
-        }
-    }
-)
-World.add(engine.world, bottomWindTunnel)
-
-function handleCollisionChange(e, isStart) {
-    for(const pair of e.pairs) {
-        const {bodyA, bodyB} = pair
-        const windTunnel =
-            bodyA == bottomWindTunnel ? bodyA
-                : bodyB == bottomWindTunnel ? bodyB : null
-        const otherObj = windTunnel == bodyA ? bodyB : bodyA
-
-        if(!windTunnel) return
-
-        if(isStart) OBJS_IN_BOTTOM_WIND_TUNNEL.push(otherObj)
-        else OBJS_IN_BOTTOM_WIND_TUNNEL.splice(OBJS_IN_BOTTOM_WIND_TUNNEL.indexOf(otherObj), 1)
+const windTunnelOptions = {
+    isStatic: true,
+    isSensor: true,
+    render: {
+        fillStyle: 'purple',
+        opacity: .25
     }
 }
 
-Matter.Events.on(engine, 'collisionStart', (e) => {
-    handleCollisionChange(e, true)
-})
+const windTunnels = [
+    {
+        objsInTunnel: [],
+        force: { x: -0.00006, y: 0 },
+        tunnel: createRectViaTopLeftPoint(
+            WALL_THICKENESS,
+            WALL_THICKENESS,
+            render.canvas.width - WALL_THICKENESS * 2,
+            20,
+            {
+                ...windTunnelOptions,
+                label: "topWindTunnel"
+            }
+        )
+    },
+    {
+        objsInTunnel: [],
+        force: { x: 0.00006, y: 0 },
+        tunnel: createRectViaTopLeftPoint(
+            WALL_THICKENESS,
+            render.canvas.height - (20 + WALL_THICKENESS),
+            render.canvas.width - WALL_THICKENESS * 2,
+            20,
+            {
+                ...windTunnelOptions,
+                label: "bottomWindTunnel"
+            }
+        )
+    },
+    {
+        objsInTunnel: [],
+        force: { x: 0, y: -0.00008 },
+        tunnel: createRectViaTopLeftPoint(
+            render.canvas.width - WALL_THICKENESS - 20,
+            WALL_THICKENESS,
+            20,
+            render.canvas.height - WALL_THICKENESS * 2,
+            {
+                ...windTunnelOptions,
+                label: "rightWindTunnel"
+            }
+        )
+    }
+]
 
-Matter.Events.on(engine, 'collisionEnd', (e) => {
-    handleCollisionChange(e, false)
+World.add(engine.world, windTunnels.map((wt) => wt.tunnel))
+
+Matter.Events.on(engine, 'collisionActive', (e) => {
+    for(const wt of windTunnels) {
+        wt.objsInTunnel =
+            e.pairs.filter((pair) => pair.bodyA.label === wt.tunnel.label || pair.bodyB.label === wt.tunnel.label)
+                    .map((pair) => {
+                        const {bodyA, bodyB} = pair
+                        return bodyA.label === wt.tunnel.label ? bodyB : bodyA
+                    })
+    }
 })
 
 Matter.Events.on(engine, 'beforeUpdate', (e) => {
-    for(const objInBottomWindTunnel of OBJS_IN_BOTTOM_WIND_TUNNEL) {
-        Body.applyForce(objInBottomWindTunnel, {
-            x: objInBottomWindTunnel.position.x,
-            y: objInBottomWindTunnel.position.y
-        }, {
-            x: 0.0001, y: 0
-        })
+    for(const wt of windTunnels) {
+        for(const obj of wt.objsInTunnel) {
+            Body.applyForce(obj, {
+                x: obj.position.x,
+                y: obj.position.y
+            },
+            wt.force)
+        }
     }
 })
 
