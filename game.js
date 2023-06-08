@@ -1,5 +1,7 @@
 // Matter = require('matter-js')
 
+const COLLISION_ACTIVE_HANDLERS = []
+const COLLISION_START_HANDLERS = []
 const WALL_THICKENESS = 5
 
 const Engine = Matter.Engine,
@@ -16,8 +18,8 @@ const render = Render.create({
     element: document.body,
     engine,
     options: {
-        height: 800,
-        width: 800,
+        height: 1000,
+        width: 1000,
         wireframes: false
     }
 })
@@ -41,6 +43,23 @@ function createWalls() {
     ]
 }
 
+function addBalls() {
+    return Composites.stack(30, 30, 20, 1, 18, 18, (x,y) => {
+        return Bodies.circle(x, y, 5.5, { frictionAir: 0.02, restitution: 1 })
+    })
+}
+
+function getObjsColliding(label) {
+    return (e) => {
+        return e.pairs
+            .filter((pair) => pair.bodyA.label === label || pair.bodyB.label === label)
+            .map((pair) => {
+                const {bodyA, bodyB} = pair
+                return bodyA.label === label ? bodyB : bodyA
+            })
+    }
+}
+
 // walls
 World.add(engine.world, createWalls())
 World.add(engine.world, createRectViaTopLeftPoint(
@@ -55,6 +74,26 @@ World.add(engine.world, createRectViaTopLeftPoint(
         }
     }
 ))
+
+// gates
+// x 865 y 765
+World.add(engine.world, createRectViaTopLeftPoint(
+    565, 660, 40, 10,
+    {
+        isStatic: true,
+        isSensor: true,
+        render: {
+            fillStyle: 'orange',
+            opacity: 0.5
+        },
+        label: 'orangeGate'
+    }
+))
+COLLISION_START_HANDLERS.push((e) => {
+    if(getObjsColliding('orangeGate')(e).length > 0) {
+        World.add(engine.world, addBalls())
+    }
+})
 
 // plinko pegs
 const plinkoPegs = Composites.stack(
@@ -74,16 +113,9 @@ const plinkoPegs = Composites.stack(
 World.add(engine.world, plinkoPegs)
 
 // balls
-const balls = Composites.stack(30, 30, 20, 1, 18, 18, (x,y) => {
-    return Bodies.circle(x, y, 5, { frictionAir: 0.02, restitution: 1 })
-})
-const biggerBalls = Composites.stack(30, 50, 20, 1, 18, 18, (x,y) => {
-    return Bodies.circle(x, y, 5, { frictionAir: 0.02, restitution: 1 })
-})
+World.add(engine.world, addBalls())
 
-World.add(engine.world, [balls, biggerBalls])
-
-// add wind tunnels!
+// add wind tunnels
 const windTunnelOptions = {
     isStatic: true,
     isSensor: true,
@@ -138,9 +170,7 @@ const windTunnels = [
     }
 ]
 
-World.add(engine.world, windTunnels.map((wt) => wt.tunnel))
-
-Matter.Events.on(engine, 'collisionActive', (e) => {
+COLLISION_ACTIVE_HANDLERS.push((e) => {
     for(const wt of windTunnels) {
         wt.objsInTunnel =
             e.pairs.filter((pair) => pair.bodyA.label === wt.tunnel.label || pair.bodyB.label === wt.tunnel.label)
@@ -148,6 +178,20 @@ Matter.Events.on(engine, 'collisionActive', (e) => {
                         const {bodyA, bodyB} = pair
                         return bodyA.label === wt.tunnel.label ? bodyB : bodyA
                     })
+    }
+})
+
+World.add(engine.world, windTunnels.map((wt) => wt.tunnel))
+
+Matter.Events.on(engine, 'collisionActive', (e) => {
+    for(const handler of COLLISION_ACTIVE_HANDLERS) {
+        handler(e)
+    }
+})
+
+Matter.Events.on(engine, 'collisionStart', (e) => {
+    for(const handler of COLLISION_START_HANDLERS) {
+        handler(e)
     }
 })
 
@@ -164,14 +208,6 @@ Matter.Events.on(engine, 'beforeUpdate', (e) => {
 })
 
 engine.gravity.scale = 0.0005
-
-// add all of the bodies to the world
-// World.add(engine.world, [boxA, boxB])
-// World.add(engine.world, [ground])
-
-// setInterval(() => {
-//     World.add(engine.world, [ Bodies.rectangle(400, 200, 80, 80) ])
-// }, 1000)
 
 // run the renderer
 Render.run(render)
