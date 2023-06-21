@@ -1,0 +1,99 @@
+<html>
+    <head>
+    </head>
+    <body>
+
+        <svg width="800" height="800" id="base"></svg>
+
+        <script>
+            function createDotGrid(svg, subDiv=10) {
+                const { height: { baseVal: { value: height }}, width: { baseVal: { value: width }}} = svg
+                for(let h = 0; h <= height; h+=subDiv) {
+                    for(let w = 0; w <= width; w+=subDiv) {
+                        svg.appendChild(createSvgElement('circle', {
+                            cx: w,
+                            cy: h,
+                            r: .5,
+                            fill: 'black'
+                        }))
+                    }
+                }
+                
+            }
+
+            function createSvgElement(name, attributes) {
+                const element = document.createElementNS("http://www.w3.org/2000/svg", name)
+                for(const key in attributes) element.setAttribute(key, attributes[key])
+                return element
+            }
+
+            function updateSvgAttributes(element, attributes) {
+                for(const key in attributes) element.setAttribute(key, attributes[key])
+            }
+
+            function getClosestGridPoint(point, subDiv) {
+                const {x,y} = point
+                const newX = Math.round(x / subDiv) * subDiv
+                const newY = Math.round(y / subDiv) * subDiv
+                return {
+                    x: newX,
+                    y: newY
+                }
+            }
+
+            const gridSubdiv = 20
+            const svg = document.getElementById('base')
+            createDotGrid(svg, gridSubdiv)
+
+            let activeLine = null
+            let activeVerts = null
+
+            const rect = createSvgElement('rect', {
+                x: 5,
+                y: 5,
+                height: 30,
+                width: 30,
+                fill: '#333333'
+            })
+            
+            svg.addEventListener('click', (event) => {
+                if(activeLine) {
+                    // end line
+                    const {x, y} = getClosestGridPoint({x: event.offsetX, y: event.offsetY}, gridSubdiv)
+                    updateSvgAttributes(activeLine, {
+                        x2: x,
+                        y2: y
+                    })
+
+                }
+                // always create a new line to connect to the previous
+                const {x, y} = getClosestGridPoint({x: event.offsetX, y: event.offsetY}, gridSubdiv)
+                activeLine = createSvgElement('line', {
+                    x1: x,
+                    y1: y,
+                    x2: x,
+                    y2: y,
+                    stroke: 'black'
+                })
+                svg.appendChild(activeLine)
+            })
+
+            svg.addEventListener('mousemove', (event) => {
+                if(activeLine) {
+                    updateSvgAttributes(activeLine, {
+                        x2: event.offsetX,
+                        y2: event.offsetY
+                    })
+                }
+            })
+
+            document.addEventListener('keydown', (event) => {
+                if(event.key == "Escape" && activeLine) {
+                    svg.removeChild(activeLine)
+                }
+            })
+
+
+        </script>
+    </body>
+</html>
