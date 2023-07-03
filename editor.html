@@ -1,5 +1,6 @@
 <html>
     <head>
+        <script src="editor.js"></script>
     </head>
     <body>
 
@@ -13,15 +14,29 @@
             <button onclick="setElementType('windstream')">Windstream</button>
             <button onclick="setElementType('ball')">Ball</button>
         </div>
+        <div style="padding: 5px; margin-top: 5px; border: lightgray solid 1px;">
+            Stuff
+        </div>
         <div style="margin-top: 5px;">
             <button>Update</button>
-            <button>Delete</button>
+            <button onclick="deleteSelectedPolygon()">Delete</button>
         </div>
         <div style="margin-top: 5px;">
             <button onclick="generateOutputJson()">Generate</button>
         </div>
 
         <script>
+            let selectedPolygon = null
+            let finalShapes = []
+
+            const svg = document.getElementById('base')
+            let canvas = new Canvas(svg, 20)
+            const drawHandler = new DrawHandler(canvas, (shapeDetails) => {
+                finalShapes.push(shapeDetails)
+            })
+            // start with wall element types by default
+            setElementType('wall')
+
             function generateOutputJson() {
                 console.log(finalShapes.map(s => {
                     const { polygon, ...data } = s
@@ -29,43 +44,8 @@
                 }))
             }
 
-            function generateGuid() {
-                return (Math.random() + 1).toString(36).substring(7)
-            }
-
-            function createDotGrid(svg, subDiv=10) {
-                const { height: { baseVal: { value: height }}, width: { baseVal: { value: width }}} = svg
-                for(let h = 0; h <= height; h+=subDiv) {
-                    for(let w = 0; w <= width; w+=subDiv) {
-                        svg.appendChild(createSvgElement('circle', {
-                            cx: w,
-                            cy: h,
-                            r: .5,
-                            fill: 'black'
-                        }))
-                    }
-                }
-                
-            }
-
-            function createSvgElement(name, attributes) {
-                const element = document.createElementNS("http://www.w3.org/2000/svg", name)
-                for(const key in attributes) element.setAttribute(key, attributes[key])
-                return element
-            }
-
             function updateSvgAttributes(element, attributes) {
                 for(const key in attributes) element.setAttribute(key, attributes[key])
-            }
-
-            function getClosestGridPoint(point, subDiv) {
-                const {x,y} = point
-                const newX = Math.round(x / subDiv) * subDiv
-                const newY = Math.round(y / subDiv) * subDiv
-                return {
-                    x: newX,
-                    y: newY
-                }
             }
 
             function shapeClickHandler(event) {
@@ -73,6 +53,7 @@
                 if(selectedPolygon) selectPolygon(selectedPolygon, false)
                 selectedPolygon = event.srcElement
                 selectPolygon(selectedPolygon, true)
+                event.stopPropagation()
             }
 
             function selectPolygon(polygon, selected) {
@@ -81,184 +62,50 @@
                 })
             }
 
+            function deleteSelectedPolygon() {
+                if(selectedPolygon) {
+                    svg.removeChild(selectedPolygon)
+                    finalShapes = finalShapes.filter((shape) => shape.id != selectedPolygon.id)
+                    selectedPolygon = null
+                }
+            }
+
             function setElementType(type) {
-                elementType = type
-                if(type == 'wall' || type == 'wall-sphere') elementColor = '#000000'
-                if(type == 'gate') elementColor = '#0000FF'
-                if(type == 'windstream') elementColor = '#A020F0'
-                if(type == 'ball') elementColor = '#FF0000'
-            }
-
-            function handleCreateSphereClick(event) {
-                if(activeSphere) {
-                    // end sphere
-                    const { cx: { baseVal: { value: cx } }, cy: { baseVal: { value: cy } } } = activeSphere
-                    const { offsetX, offsetY } = event
-
-                    let x = cx - offsetX;
-                    let y = cy - offsetY;
-                    const distance = Math.sqrt(x * x + y * y);
-
-                    updateSvgAttributes(activeSphere, {
-                        r: distance
-                    })
-
-                    // add click handler
-                    activeSphere.addEventListener('click', shapeClickHandler)
-
-                    const id = generateGuid()
-
-                    finalShapes.push({
-                        id,
-                        type: elementType,
-                        color: elementColor,
-                        sphere: {
-                            cx,
-                            cy,
-                            r: distance
-                        },
-                        shape: activeSphere
-                    })
-
-                    activeSphere = null
-                } else {
-                    const {x, y} = getClosestGridPoint({x: event.offsetX, y: event.offsetY}, gridSubdiv)
-                    activeSphere = createSvgElement('circle', {
-                        cx: x,
-                        cy: y,
-                        r: 0,
-                        fill: elementColor
-                    })
-                    svg.appendChild(activeSphere)
+                const attributes = {
+                    elementType: type,
+                    fill: '#000'
                 }
-            }
 
-            function handleCreateSphereMove(event) {
-                if(activeSphere) {
-                    const { cx: { baseVal: { value: cx } }, cy: { baseVal: { value: cy } } } = activeSphere
-                    const { offsetX, offsetY } = event
-
-                    let x = cx - offsetX;
-                    let y = cy - offsetY;
-                    const distance = Math.sqrt(x * x + y * y);
-
-                    updateSvgAttributes(activeSphere, {
-                        r: distance
-                    })
+                if(type == 'wall') attributes.fill = '#000000'
+                if(type == 'wall-sphere') attributes.fill = '#000000'
+                if(type == 'gate') {
+                    attributes.fill = '#0000FF'
+                    attributes.opacity = '0.3'
                 }
-            }
-
-            function handleCreateLineClick(event) {
-                if(activeLine) {
-                    // end line
-                    const {x, y} = getClosestGridPoint({x: event.offsetX, y: event.offsetY}, gridSubdiv)
-                    updateSvgAttributes(activeLine, {
-                        x2: x,
-                        y2: y
-                    })
-                    // keep track of each new vertex
-                    activeLines.push(activeLine)
-                    // keep track of the ending point
-                    activeVertices.push({x, y})
-
-                    // check if shape has been closed
-                    const endingVertex = `${x},${y}`
-                    if(uniqueVerts.has(endingVertex)) {
-                        // closed a shape! convert lines to a polygon and don't try to create another line
-
-                        // delete all lines being drawn
-                        for(const line of activeLines) svg.removeChild(line)
-
-                        // create polygon
-                        const id = generateGuid()
-                        const points = activeVertices.map((v) => `${v.x} ${v.y}`).join(' ')
-                        const polygon = createSvgElement('polygon', {
-                            id,
-                            points,
-                            fill: elementColor
-                        })
-                        svg.appendChild(polygon)
-
-                        // add click handler
-                        polygon.addEventListener('click', shapeClickHandler)
-
-                        finalShapes.push({
-                            id,
-                            type: elementType,
-                            color: elementColor,
-                            points,
-                            polygon
-                        })
-
-                        // clear active objects
-                        activeLine = null
-                        activeLines = []
-                        activeVertices = []
-                        uniqueVerts = new Set()
-
-                        return
-                    } else {
-                        uniqueVerts.add(endingVertex)
-                    }
+                if(type == 'windstream') {
+                    attributes.fill = '#A020F0'
+                    attributes.opacity = '0.3'
                 }
-                // always create a new line to connect to the previous
-                const {x, y} = getClosestGridPoint({x: event.offsetX, y: event.offsetY}, gridSubdiv)
-                activeLine = createSvgElement('line', {
-                    x1: x,
-                    y1: y,
-                    x2: x,
-                    y2: y,
-                    stroke: 'black'
-                })
-                svg.appendChild(activeLine)
-                // keep track of the starting point
-                uniqueVerts.add(`${x},${y}`)
-                activeVertices.push({x, y})
+                if(type == 'ball') attributes.fill = '#FF0000'
+
+                let drawShapeHandler = null
+                if(['wall-sphere','ball'].indexOf(type) != -1) drawShapeHandler = new DrawCircleHandler(drawHandler, attributes)
+                else drawShapeHandler = new DrawPolygonHandler(drawHandler, attributes)
+                drawHandler.setShapeHandler(drawShapeHandler)
             }
-
-            const gridSubdiv = 20
-            const svg = document.getElementById('base')
-            createDotGrid(svg, gridSubdiv)
-
-            let elementType = null
-            let elementColor = null
-            // start with wall element types by default
-            setElementType('wall')
-
-            let activeLine = null
-            let activeSphere = null
-            let activeLines = []
-            let activeVertices = []
-            let uniqueVerts = new Set()
-            const finalShapes = []
-            let selectedPolygon = null
-
-            svg.addEventListener('click', (event) => {
-                if(['wall-sphere','ball'].indexOf(elementType) != -1) handleCreateSphereClick(event)
-                if(['wall','gate','windstream'].indexOf(elementType) != -1) handleCreateLineClick(event)
-            })
-
-            svg.addEventListener('mousemove', (event) => {
-                if(activeLine) {
-                    updateSvgAttributes(activeLine, {
-                        x2: event.offsetX,
-                        y2: event.offsetY
-                    })
-                }
-                if(['wall-sphere','ball'].indexOf(elementType) != -1) handleCreateSphereMove(event)
-            })
 
             document.addEventListener('keydown', (event) => {
-                if(event.key == "Escape" && activeLine) {
-                    svg.removeChild(activeLine)
-                    activeLine = null
-                } else if (event.key == "Escape" && selectedPolygon) {
-                    selectPolygon(selectedPolygon, false)
-                    selectedPolygon = false
+                if(event.key == "Escape") {
+                    if(selectedPolygon) {
+                        // polygon current selected, to deselect it
+                        selectPolygon(selectedPolygon, false)
+                        selectedPolygon = false
+                        return
+                    }
+                    // cancel current drawing action (default)
+                    drawHandler.cancelDrawing()
                 }
             })
-
-
         </script>
     </body>
 </html>
